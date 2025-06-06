@@ -15,11 +15,10 @@
 
 ### Passo 2: Importar Repositório
 1. Selecione o repositório: `Manhosu/blacknbot`
-2. Configure as seguintes opções:
-   - **Framework Preset**: Next.js
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `.next`
+2. **IMPORTANTE**: Deixe as configurações padrão
+   - O arquivo `vercel.json` já está configurado
+   - Framework será detectado automaticamente
+   - Comandos de build estão no vercel.json
 
 ### Passo 3: Variáveis de Ambiente
 Configure estas variáveis no Vercel:
@@ -48,9 +47,10 @@ NEXT_TELEMETRY_DISABLED=1
 ### Passo 2: Configurar Projeto
 1. Selecione "Deploy from GitHub repo"
 2. Escolha o repositório: `Manhosu/blacknbot`
-3. Configure:
+3. **IMPORTANTE**: Configure:
    - **Root Directory**: `backend`
-   - **Start Command**: `python main.py`
+   - **Start Command**: Deixe vazio (será usado o railway.json)
+   - **Build Command**: Deixe vazio (será usado o nixpacks.toml)
 
 ### Passo 3: Variáveis de Ambiente
 Configure estas variáveis no Railway:
@@ -125,6 +125,15 @@ vercel logs https://seu-dominio.vercel.app
 - Verificar string de conexão do Supabase
 - Verificar se as tabelas existem
 - Verificar políticas RLS
+
+#### 5. Vercel: "functions property cannot be used with builds"
+- O vercel.json foi corrigido para usar a nova sintaxe
+- Se ainda aparecer, remova qualquer `functions` do vercel.json
+
+#### 6. Railway: "No start command could be found"
+- Certifique-se de que está deployando o diretório `backend`
+- O arquivo `nixpacks.toml` e `railway.json` definem os comandos
+- Se persistir, configure manualmente: `python main.py`
 
 ### Comandos de Debug
 

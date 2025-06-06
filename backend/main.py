@@ -87,9 +87,17 @@ async def global_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    
+    # Obter porta do Railway/Heroku ou usar 8000 como padrão
+    port = int(os.environ.get("PORT", 8000))
+    
+    logger.info(f"🚀 Iniciando servidor na porta {port}")
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=settings.environment == "development"
+        port=port,
+        reload=settings.environment == "development",
+        log_level="info"
     ) 
