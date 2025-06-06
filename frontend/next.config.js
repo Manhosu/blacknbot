@@ -2,7 +2,6 @@
 const nextConfig = {
   // Configurações essenciais
   reactStrictMode: true,
-  swcMinify: true,
   
   // Configurações de build
   output: 'standalone',
