@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { DeleteBotModal } from '@/components/ui/delete-bot-modal'
 
 interface BotData {
   id: string
@@ -32,6 +33,8 @@ export default function BotsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingBotId, setDeletingBotId] = useState<string | null>(null)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [botToDelete, setBotToDelete] = useState<{id: string, username: string} | null>(null)
   const [isVisible, setIsVisible] = useState({
     header: false,
     actions: false,
@@ -165,17 +168,15 @@ export default function BotsPage() {
     router.push(`/dashboard/bots/${botId}`)
   }
 
-  const handleDeleteBot = async (botId: string, botUsername: string) => {
-    // Confirmação dupla para evitar exclusões acidentais
-    const confirmMessage = `Tem certeza que deseja excluir o bot @${botUsername}?\n\nEsta ação é IRREVERSÍVEL e irá:\n• Remover o bot permanentemente\n• Excluir todos os planos criados\n• Excluir histórico de vendas\n• Cancelar todas as assinaturas ativas\n\nDigite "EXCLUIR" para confirmar:`
-    
-    const confirmation = prompt(confirmMessage)
-    
-    if (confirmation !== 'EXCLUIR') {
-      return
-    }
+  const handleDeleteBot = (botId: string, botUsername: string) => {
+    setBotToDelete({ id: botId, username: botUsername })
+    setDeleteModalOpen(true)
+  }
 
-    setDeletingBotId(botId)
+  const confirmDeleteBot = async () => {
+    if (!botToDelete) return
+
+    setDeletingBotId(botToDelete.id)
     
     try {
       const supabase = createClient()
@@ -187,13 +188,13 @@ export default function BotsPage() {
       await supabase
         .from('sales')
         .delete()
-        .eq('bot_id', botId)
+        .eq('bot_id', botToDelete.id)
       
       // Deletar planos
       await supabase
         .from('plans')
         .delete()
-        .eq('bot_id', botId)
+        .eq('bot_id', botToDelete.id)
       
       // Finalmente, deletar o bot
       toast.loading('Excluindo bot...', { id: 'delete-bot' })
@@ -201,20 +202,31 @@ export default function BotsPage() {
       const { error: deleteError } = await supabase
         .from('bots')
         .delete()
-        .eq('id', botId)
+        .eq('id', botToDelete.id)
       
       if (deleteError) throw deleteError
       
       // Remover da lista local
-      setBots(prevBots => prevBots.filter(bot => bot.id !== botId))
+      setBots(prevBots => prevBots.filter(bot => bot.id !== botToDelete.id))
       
-      toast.success(`✅ Bot @${botUsername} excluído com sucesso!`, { id: 'delete-bot' })
+      toast.success(`✅ Bot @${botToDelete.username} excluído com sucesso!`, { id: 'delete-bot' })
+      
+      // Fechar modal
+      setDeleteModalOpen(false)
+      setBotToDelete(null)
       
     } catch (error: any) {
       console.error('Erro ao excluir bot:', error)
       toast.error('❌ Erro ao excluir bot. Tente novamente.', { id: 'delete-bot' })
     } finally {
       setDeletingBotId(null)
+    }
+  }
+
+  const closeDeleteModal = () => {
+    if (!deletingBotId) {
+      setDeleteModalOpen(false)
+      setBotToDelete(null)
     }
   }
 
@@ -450,6 +462,15 @@ export default function BotsPage() {
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <DeleteBotModal
+        isOpen={deleteModalOpen}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDeleteBot}
+        botUsername={botToDelete?.username || ''}
+        isDeleting={!!deletingBotId}
+      />
     </div>
   )
 } 

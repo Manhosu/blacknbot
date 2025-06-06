@@ -9,8 +9,6 @@ import { createClient } from '@/lib/supabase'
 import { 
   Monitor, 
   BarChart3, 
-  Users, 
-  Settings, 
   LogOut, 
   ChevronLeft, 
   Home,
@@ -20,7 +18,8 @@ import {
   DollarSign,
   Bot,
   Menu,
-  Target
+  Target,
+  Key
 } from 'lucide-react'
 
 export function Sidebar() {
@@ -99,14 +98,9 @@ export function Sidebar() {
       icon: Target
     },
     {
-      name: 'Clientes',
-      href: '/dashboard/customers',
-      icon: Users
-    },
-    {
-      name: 'Configurações',
-      href: '/dashboard/settings',
-      icon: Settings
+      name: 'PushInPay',
+      href: '/dashboard/pushinpay',
+      icon: Key
     }
   ]
 

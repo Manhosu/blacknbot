@@ -12,7 +12,6 @@ import {
   TrendingUp,
   DollarSign,
   MessageSquare,
-  Settings,
   ArrowRight
 } from 'lucide-react'
 
@@ -91,7 +90,7 @@ export default function DashboardPage() {
         }`}
       >
         <h3 className="text-xl font-bold text-white mb-6">Ações Rápidas</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
             {
               title: 'Criar Novo Bot',
@@ -116,14 +115,6 @@ export default function DashboardPage() {
               href: '/dashboard/sales',
               color: 'from-accent-gold to-primary-600',
               delay: '200ms'
-            },
-            {
-              title: 'Configurações',
-              description: 'Ajuste suas preferências',
-              icon: Settings,
-              href: '/dashboard/settings',
-              color: 'from-primary-600 to-accent-emerald',
-              delay: '300ms'
             }
           ].map((action) => (
             <Link key={action.title} href={action.href}>

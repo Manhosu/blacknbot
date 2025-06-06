@@ -48,13 +48,7 @@ const nextConfig = {
 
   // Configurações de redirecionamento
   async redirects() {
-    return [
-      {
-        source: '/',
-        destination: '/login',
-        permanent: false,
-      },
-    ]
+    return []
   },
 
   // Configurações experimentais
