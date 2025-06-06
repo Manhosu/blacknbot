@@ -94,7 +94,9 @@ class SupabaseService:
             welcome_text="Bem-vindo ao bot!",
             media_url="https://via.placeholder.com/400x300.jpg",
             media_type="photo",
-            vip_group_id="-1001234567890",  # ID mock do grupo VIP
+            vip_chat_id="-1001234567890",  # ID mock do chat VIP
+            vip_type="group",  # Tipo mock
+            vip_name="Grupo VIP Mock",  # Nome mock
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
@@ -109,7 +111,9 @@ class SupabaseService:
             welcome_text=bot_data.welcome_text,
             media_url=bot_data.media_url,
             media_type=bot_data.media_type,
-            vip_group_id=bot_data.vip_group_id,
+            vip_chat_id=bot_data.vip_chat_id,
+            vip_type=bot_data.vip_type,
+            vip_name=bot_data.vip_name,
             created_at=datetime.now(),
             updated_at=datetime.now()
         )
@@ -129,7 +133,9 @@ class SupabaseService:
             welcome_text="🤖 Olá! Bem-vindo ao nosso bot!",
             media_url="https://via.placeholder.com/400x300.jpg",
             media_type="photo",
-            vip_group_id=None,
+            vip_chat_id=None,
+            vip_type=None,
+            vip_name=None,
             created_at=datetime.now(),
             updated_at=datetime.now()
         )

@@ -49,8 +49,28 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [isVisible, setIsVisible] = useState({
+    header: false,
+    stats: false,
+    filters: false,
+    table: false
+  })
   const { user } = useAuthStore()
   const supabase = createClient()
+
+  // Animation effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible({
+        header: true,
+        stats: true,
+        filters: true,
+        table: true
+      })
+    }, 100)
+
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -164,180 +184,203 @@ export default function SalesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+          <p className="text-gray-300">Carregando vendas...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Vendas</h1>
-        <p className="text-gray-400 mt-2">
-          Acompanhe todas as vendas e pagamentos do seu bot.
+    <div className="space-y-8">
+      {/* Header com animação */}
+      <div 
+        className={`transition-all duration-700 ease-out ${
+          isVisible.header ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-10'
+        }`}
+      >
+        <h1 className="text-4xl font-bold text-white flex items-center" style={{
+          textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)'
+        }}>
+          <BarChart3 className="mr-3 h-8 w-8 text-primary-400" />
+          Vendas
+        </h1>
+        <p className="text-gray-300 mt-2" style={{
+          textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)'
+        }}>
+          Acompanhe todas as vendas e pagamentos do seu bot
         </p>
       </div>
 
-      {/* Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="p-6">
+      {/* Estatísticas com animação */}
+      <div 
+        className={`grid grid-cols-1 md:grid-cols-4 gap-6 transition-all duration-700 ease-out ${
+          isVisible.stats ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}
+      >
+        {[
+          {
+            icon: BarChart3,
+            title: 'Total de Vendas',
+            value: stats.total_sales,
+            color: 'text-blue-400',
+            delay: '0ms'
+          },
+          {
+            icon: DollarSign,
+            title: 'Receita Total',
+            value: formatPrice(stats.total_revenue),
+            color: 'text-green-400',
+            delay: '100ms'
+          },
+          {
+            icon: TrendingUp,
+            title: 'Vendas Pagas',
+            value: stats.paid_sales,
+            color: 'text-accent-emerald',
+            delay: '200ms'
+          },
+          {
+            icon: Users,
+            title: 'Vendas Pendentes',
+            value: stats.pending_sales,
+            color: 'text-yellow-400',
+            delay: '300ms'
+          }
+        ].map((stat, index) => (
+          <div
+            key={stat.title}
+            className={`bg-dark-700/30 backdrop-blur-xl rounded-2xl p-6 border border-dark-600/30 hover:bg-dark-600/40 hover:border-primary-500/50 transition-all duration-500 hover:scale-105 hover:shadow-xl hover:shadow-primary-500/20 transform ${
+              isVisible.stats ? 'translate-y-0 opacity-100' : 'translate-y-5 opacity-0'
+            }`}
+            style={{ 
+              transitionDelay: stat.delay 
+            }}
+          >
             <div className="flex items-center">
-              <BarChart3 className="h-8 w-8 text-blue-400" />
+              <stat.icon className={`h-8 w-8 ${stat.color} group-hover:scale-110 transition-transform duration-300`} />
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-400">Total de Vendas</p>
-                <p className="text-2xl font-bold text-white">{stats.total_sales}</p>
+                <p className="text-sm font-medium text-gray-400">{stat.title}</p>
+                <p className="text-2xl font-bold text-white">{stat.value}</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-green-400" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-400">Receita Total</p>
-                <p className="text-2xl font-bold text-white">{formatPrice(stats.total_revenue)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-orange-400" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-400">Vendas Pagas</p>
-                <p className="text-2xl font-bold text-white">{stats.paid_sales}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700">
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Calendar className="h-8 w-8 text-purple-400" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-400">Pendentes</p>
-                <p className="text-2xl font-bold text-white">{stats.pending_sales}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filtros */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Buscar por ID do usuário, pagamento ou plano..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-            </div>
-            <div className="sm:w-48">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-gray-600 bg-gray-700 text-white text-sm"
-              >
-                <option value="all">Todos os Status</option>
-                <option value="pending">Pendente</option>
-                <option value="paid">Pago</option>
-                <option value="cancelled">Cancelado</option>
-                <option value="expired">Expirado</option>
-              </select>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
 
-      {/* Lista de vendas */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white">Histórico de Vendas</CardTitle>
-          <CardDescription className="text-gray-400">
-            {filteredSales.length} venda(s) encontrada(s)
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {filteredSales.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              {sales.length === 0 ? 'Nenhuma venda registrada ainda.' : 'Nenhuma venda encontrada com os filtros aplicados.'}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Usuário</TableHead>
-                    <TableHead>Plano</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>ID Pagamento</TableHead>
-                    <TableHead>Data</TableHead>
+      {/* Filtros com animação */}
+      <div 
+        className={`bg-dark-700/30 backdrop-blur-xl rounded-2xl p-6 border border-dark-600/30 hover:bg-dark-600/40 transition-all duration-500 ${
+          isVisible.filters ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-5 scale-95'
+        }`}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Buscar por ID, nome do plano..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-dark-800/50 border-dark-600/50 text-white placeholder-gray-400 focus:border-primary-500 focus:bg-dark-700/50 transition-all duration-300"
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Filter className="h-4 w-4 text-gray-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-dark-800/50 border border-dark-600/50 text-white rounded-lg px-3 py-2 focus:border-primary-500 focus:bg-dark-700/50 transition-all duration-300"
+            >
+              <option value="all">Todos os status</option>
+              <option value="pending">Pendente</option>
+              <option value="paid">Pago</option>
+              <option value="cancelled">Cancelado</option>
+              <option value="expired">Expirado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela de vendas com animação */}
+      <div 
+        className={`bg-dark-700/30 backdrop-blur-xl rounded-2xl border border-dark-600/30 hover:bg-dark-600/40 transition-all duration-700 ease-out ${
+          isVisible.table ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}
+      >
+        <div className="p-6 border-b border-dark-600/30">
+          <h3 className="text-xl font-bold text-white">Lista de Vendas</h3>
+          <p className="text-gray-300">Total: {filteredSales.length} vendas</p>
+        </div>
+        
+        {filteredSales.length === 0 ? (
+          <div className="p-12 text-center">
+            <BarChart3 className="mx-auto h-16 w-16 text-gray-500 mb-4 animate-pulse" />
+            <h3 className="text-xl font-bold text-white mb-2">Nenhuma venda encontrada</h3>
+            <p className="text-gray-300">
+              {sales.length === 0 
+                ? 'Você ainda não possui vendas registradas.'
+                : 'Nenhuma venda corresponde aos filtros aplicados.'
+              }
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-dark-600/30 hover:bg-dark-700/30">
+                  <TableHead className="text-gray-300">ID Telegram</TableHead>
+                  <TableHead className="text-gray-300">Plano</TableHead>
+                  <TableHead className="text-gray-300">Status</TableHead>
+                  <TableHead className="text-gray-300">Valor</TableHead>
+                  <TableHead className="text-gray-300">Data</TableHead>
+                  <TableHead className="text-gray-300">Pagamento ID</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSales.map((sale, index) => (
+                  <TableRow 
+                    key={sale.id} 
+                    className={`border-dark-600/30 hover:bg-dark-700/50 transition-all duration-300 ${
+                      isVisible.table ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    style={{ 
+                      transitionDelay: `${index * 50}ms` 
+                    }}
+                  >
+                    <TableCell className="text-white font-mono text-sm">
+                      {sale.user_telegram_id}
+                    </TableCell>
+                    <TableCell className="text-white">
+                      <div>
+                        <div className="font-medium">{sale.plans.name}</div>
+                        <div className="text-sm text-gray-400">
+                          {sale.plans.duration_days} dias
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(sale.status)}
+                    </TableCell>
+                    <TableCell className="text-white">
+                      {sale.amount_received 
+                        ? formatPrice(sale.amount_received)
+                        : formatPrice(sale.plans.price)
+                      }
+                    </TableCell>
+                    <TableCell className="text-gray-300">
+                      {formatDate(sale.created_at)}
+                    </TableCell>
+                    <TableCell className="text-gray-400 font-mono text-sm">
+                      {sale.pushinpay_payment_id || '-'}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSales.map((sale) => (
-                    <TableRow key={sale.id}>
-                      <TableCell className="font-mono text-sm">
-                        {sale.user_telegram_id}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{sale.plans.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {sale.plans.duration_days} dias
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{formatPrice(sale.plans.price)}</p>
-                          {sale.amount_received && sale.amount_received !== sale.plans.price && (
-                            <p className="text-sm text-green-600">
-                              Recebido: {formatPrice(sale.amount_received)}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(sale.status)}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {sale.pushinpay_payment_id || '-'}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">{formatDate(sale.created_at)}</p>
-                          {sale.updated_at !== sale.created_at && (
-                            <p className="text-xs text-gray-500">
-                              Atualizado: {formatDate(sale.updated_at)}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   )
 } 

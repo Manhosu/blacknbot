@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Literal
 from datetime import datetime
 from decimal import Decimal
@@ -33,7 +33,9 @@ class BotUpdate(BaseModel):
     welcome_text: Optional[str] = None
     media_url: Optional[str] = None
     media_type: Optional[Literal["photo", "video"]] = None
-    vip_group_id: Optional[str] = None
+    vip_chat_id: Optional[str] = None
+    vip_type: Optional[Literal["group", "channel"]] = None
+    vip_name: Optional[str] = None
 
 class BotResponse(BaseModel):
     id: str
@@ -45,7 +47,9 @@ class BotResponse(BaseModel):
     welcome_text: Optional[str]
     media_url: Optional[str]
     media_type: Optional[str]
-    vip_group_id: Optional[str] = None  # ID do grupo VIP no Telegram
+    vip_chat_id: Optional[str] = None  # ID do chat VIP (grupo ou canal)
+    vip_type: Optional[Literal["group", "channel"]] = None  # Tipo do chat VIP
+    vip_name: Optional[str] = None  # Nome do chat VIP
     is_active: Optional[bool] = True
     created_at: datetime
     updated_at: datetime
@@ -54,12 +58,12 @@ class BotResponse(BaseModel):
 class PlanCreate(BaseModel):
     bot_id: str
     name: str
-    price: Decimal
+    price: Decimal = Field(..., ge=4.90, description="Preço mínimo de R$4,90")
     duration_days: int
 
 class PlanUpdate(BaseModel):
     name: Optional[str] = None
-    price: Optional[Decimal] = None
+    price: Optional[Decimal] = Field(None, ge=4.90, description="Preço mínimo de R$4,90")
     duration_days: Optional[int] = None
 
 class PlanResponse(BaseModel):
@@ -141,4 +145,16 @@ class LoginRequest(BaseModel):
     password: str
 
 class BotActivationRequest(BaseModel):
-    vip_group_link: str  # Link ou ID do grupo VIP 
+    vip_group_link: str  # Link ou ID do grupo VIP
+
+# Esquema para ativação de canal/grupo via painel
+class VipChatActivation(BaseModel):
+    chat_type: Literal["group", "channel"]
+    chat_identifier: str  # Link ou ID do chat
+    
+class VipChatValidationResponse(BaseModel):
+    success: bool
+    message: str
+    chat_id: Optional[str] = None
+    chat_title: Optional[str] = None
+    chat_type: Optional[str] = None 

@@ -94,7 +94,18 @@ async def handle_start_command(chat_id: int, user_id: int, bot_token: str):
         
         logger.info(f"Bot identificado: {bot_data['bot_username']} (ID: {bot_data['id']})")
         
-        # 2. Buscar planos do bot
+        # 2. Verificar se a mensagem de boas-vindas está configurada
+        welcome_text = bot_data.get('welcome_text')
+        if not welcome_text or welcome_text.strip() == '':
+            logger.warning(f"Mensagem de boas-vindas não configurada para bot {bot_data['id']}")
+            await send_simple_welcome(
+                chat_id, 
+                bot_token, 
+                "⚠️ A mensagem de boas-vindas não está configurada. Por favor, configure uma mensagem na área de personalização."
+            )
+            return
+        
+        # 3. Buscar planos do bot
         plans = await supabase_service.get_bot_plans(bot_data['id'], bot_data['user_id'])
         
         if not plans:
@@ -102,10 +113,10 @@ async def handle_start_command(chat_id: int, user_id: int, bot_token: str):
             await send_simple_welcome(chat_id, bot_token, bot_data['welcome_text'])
             return
         
-        # 3. Criar serviço Telegram para este bot
+        # 4. Criar serviço Telegram para este bot
         telegram_service = get_telegram_service(bot_token)
         
-        # 4. Preparar botões de planos com links de pagamento
+        # 5. Preparar botões de planos com links de pagamento
         plan_buttons = []
         for plan in plans:
             payment_link = await generate_pushinpay_link(
@@ -123,7 +134,7 @@ async def handle_start_command(chat_id: int, user_id: int, bot_token: str):
         
         keyboard = telegram_service.create_inline_keyboard(plan_buttons)
         
-        # 5. Enviar mensagem com mídia ou texto
+        # 6. Enviar mensagem com mídia ou texto
         await send_welcome_with_media(
             telegram_service, chat_id, bot_data, keyboard
         )
@@ -147,7 +158,9 @@ async def identify_bot_by_token(bot_token: str):
                 "welcome_text": "doiszero",  # Welcome text real
                 "media_url": None,
                 "media_type": None,
-                "vip_group_id": None
+                "vip_chat_id": None,
+                "vip_type": None,
+                "vip_name": None
             }
         
         # Para outros bots, buscar no sistema
@@ -161,7 +174,9 @@ async def identify_bot_by_token(bot_token: str):
                 "welcome_text": bot.welcome_text or "🤖 Olá! Bem-vindo ao nosso bot!",
                 "media_url": bot.media_url,
                 "media_type": bot.media_type,
-                "vip_group_id": bot.vip_group_id
+                "vip_chat_id": bot.vip_chat_id,
+                "vip_type": bot.vip_type,
+                "vip_name": bot.vip_name
             }
         
         # Se não encontrar, retornar mock para desenvolvimento
@@ -174,7 +189,9 @@ async def identify_bot_by_token(bot_token: str):
             "welcome_text": "🤖 Olá! Bem-vindo ao nosso bot!\n\nEscolha um de nossos planos:",
             "media_url": "https://via.placeholder.com/400x300.jpg",
             "media_type": "photo",
-            "vip_group_id": None
+            "vip_chat_id": None,
+            "vip_type": None,
+            "vip_name": None
         }
         
     except Exception as e:

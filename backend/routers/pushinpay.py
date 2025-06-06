@@ -134,26 +134,28 @@ async def notify_payment_status(sale, pushinpay_status: str):
         telegram_service = get_telegram_service(bot.bot_token)
         chat_id = int(sale.user_telegram_id)
         
-        # Adicionar ao grupo VIP se pagamento aprovado
+        # Adicionar ao chat VIP se pagamento aprovado
         vip_added = False
-        if sale.status == "paid" and bot.vip_group_id:
-            vip_added = await add_user_to_vip_group(telegram_service, bot.vip_group_id, chat_id)
+        if sale.status == "paid" and bot.vip_chat_id:
+            vip_added = await add_user_to_vip_chat(telegram_service, bot.vip_chat_id, chat_id, bot.vip_type or "group")
         
         # Gerar mensagem baseada no status
         if sale.status == "paid":
             if vip_added:
+                chat_type_text = "canal" if bot.vip_type == "channel" else "grupo"
                 message = (
                     "✅ <b>Pagamento confirmado!</b>\n\n"
                     f"💰 Valor: R$ {sale.amount_received}\n"
-                    "🎉 <b>Você foi adicionado ao grupo VIP com sucesso!</b>\n\n"
+                    f"🎉 <b>Você foi adicionado ao {chat_type_text} VIP com sucesso!</b>\n\n"
                     f"📅 Acesso válido até: {sale.access_expires_at.strftime('%d/%m/%Y') if sale.access_expires_at else 'Indefinido'}\n"
                     "Obrigado pela sua compra! 🙏"
                 )
             else:
+                chat_type_text = "canal" if bot.vip_type == "channel" else "grupo"
                 message = (
                     "✅ <b>Pagamento confirmado!</b>\n\n"
                     f"💰 Valor: R$ {sale.amount_received}\n"
-                    "⚠️ <b>Não foi possível adicionar você automaticamente ao grupo.</b>\n\n"
+                    f"⚠️ <b>Não foi possível adicionar você automaticamente ao {chat_type_text}.</b>\n\n"
                     "Entre em contato com o suporte para liberar o acesso.\n"
                     "Obrigado pela sua compra! 🙏"
                 )
@@ -190,59 +192,83 @@ async def notify_payment_status(sale, pushinpay_status: str):
     except Exception as e:
         logger.error(f"Erro ao notificar usuário: {str(e)}")
 
-async def add_user_to_vip_group(telegram_service, vip_group_id: str, user_id: int) -> bool:
+async def add_user_to_vip_chat(telegram_service, vip_chat_id: str, user_id: int, chat_type: str = "group") -> bool:
     """
-    Adicionar usuário automaticamente ao grupo VIP
-    """
-    try:
-        logger.info(f"Adicionando usuário {user_id} ao grupo VIP {vip_group_id}")
-        
-        # Tentar adicionar o usuário ao grupo
-        result = await telegram_service.add_chat_member(
-            chat_id=vip_group_id,
-            user_id=user_id
-        )
-        
-        if result.get('ok'):
-            logger.info(f"Usuário {user_id} adicionado com sucesso ao grupo VIP")
-            return True
-        else:
-            logger.error(f"Erro ao adicionar usuário ao grupo VIP: {result}")
-            return False
-        
-    except Exception as e:
-        logger.error(f"Erro ao adicionar usuário {user_id} ao grupo VIP: {str(e)}")
-        return False
-
-async def remove_user_from_vip_group(telegram_service, vip_group_id: str, user_id: int) -> bool:
-    """
-    Remover usuário do grupo VIP
+    Adicionar usuário automaticamente ao canal ou grupo VIP
     """
     try:
-        logger.info(f"Removendo usuário {user_id} do grupo VIP {vip_group_id}")
+        chat_name = "canal" if chat_type == "channel" else "grupo"
+        logger.info(f"Adicionando usuário {user_id} ao {chat_name} VIP {vip_chat_id}")
         
-        # Remover o usuário do grupo
-        result = await telegram_service.kick_chat_member(
-            chat_id=vip_group_id,
-            user_id=user_id
-        )
-        
-        if result.get('ok'):
-            logger.info(f"Usuário {user_id} removido com sucesso do grupo VIP")
-            
-            # Desbanir para permitir entrada futura
-            await telegram_service.unban_chat_member(
-                chat_id=vip_group_id,
+        # Para canais, usar chatInviteLink (se o canal for privado)
+        # Para grupos, usar addChatMember diretamente
+        if chat_type == "channel":
+            # Primeiro, tentar adicionar diretamente (funciona para canais públicos)
+            result = await telegram_service.add_chat_member(
+                chat_id=vip_chat_id,
                 user_id=user_id
             )
             
+            if result.get('ok'):
+                logger.info(f"Usuário {user_id} adicionado com sucesso ao canal VIP")
+                return True
+            else:
+                # Se falhar, pode ser canal privado - precisaria de convite
+                logger.warning(f"Falha ao adicionar ao canal, tentando método alternativo: {result}")
+                
+                # Para canais privados, seria necessário criar um link de convite
+                # Mas vamos manter simples por agora
+                return False
+        else:
+            # Para grupos, usar o método tradicional
+            result = await telegram_service.add_chat_member(
+                chat_id=vip_chat_id,
+                user_id=user_id
+            )
+            
+            if result.get('ok'):
+                logger.info(f"Usuário {user_id} adicionado com sucesso ao grupo VIP")
+                return True
+            else:
+                logger.error(f"Erro ao adicionar usuário ao grupo VIP: {result}")
+                return False
+        
+    except Exception as e:
+        logger.error(f"Erro ao adicionar usuário {user_id} ao {chat_name} VIP: {str(e)}")
+        return False
+
+async def remove_user_from_vip_chat(telegram_service, vip_chat_id: str, user_id: int, chat_type: str = "group") -> bool:
+    """
+    Remover usuário do canal ou grupo VIP
+    """
+    try:
+        chat_name = "canal" if chat_type == "channel" else "grupo"
+        logger.info(f"Removendo usuário {user_id} do {chat_name} VIP {vip_chat_id}")
+        
+        # Remover o usuário do chat
+        result = await telegram_service.kick_chat_member(
+            chat_id=vip_chat_id,
+            user_id=user_id
+        )
+        
+        if result.get('ok'):
+            logger.info(f"Usuário {user_id} removido com sucesso do {chat_name} VIP")
+            
+            # Para grupos, desbanir para permitir entrada futura
+            # Para canais, não é necessário desbanir
+            if chat_type == "group":
+                await telegram_service.unban_chat_member(
+                    chat_id=vip_chat_id,
+                    user_id=user_id
+                )
+            
             return True
         else:
-            logger.error(f"Erro ao remover usuário do grupo VIP: {result}")
+            logger.error(f"Erro ao remover usuário do {chat_name} VIP: {result}")
             return False
         
     except Exception as e:
-        logger.error(f"Erro ao remover usuário {user_id} do grupo VIP: {str(e)}")
+        logger.error(f"Erro ao remover usuário {user_id} do {chat_name} VIP: {str(e)}")
         return False
 
 @router.get("/status/{payment_id}")
@@ -283,18 +309,19 @@ async def expire_access():
                 user_id = "mock-user-id"  # Em produção, seria buscado via join
                 bot = await supabase_service.get_bot(sale.bot_id, user_id)
                 
-                if not bot or not bot.vip_group_id:
-                    logger.warning(f"Bot não encontrado ou sem grupo VIP para venda {sale.id}")
+                if not bot or not bot.vip_chat_id:
+                    logger.warning(f"Bot não encontrado ou sem chat VIP para venda {sale.id}")
                     continue
                 
                 # Criar serviço Telegram
                 telegram_service = get_telegram_service(bot.bot_token)
                 
-                # Remover usuário do grupo VIP
-                removed = await remove_user_from_vip_group(
+                # Remover usuário do chat VIP
+                removed = await remove_user_from_vip_chat(
                     telegram_service, 
-                    bot.vip_group_id, 
-                    int(sale.user_telegram_id)
+                    bot.vip_chat_id, 
+                    int(sale.user_telegram_id),
+                    bot.vip_type or "group"
                 )
                 
                 if removed:
@@ -303,7 +330,7 @@ async def expire_access():
                     await supabase_service.update_sale(sale.id, sale_update)
                     
                     # Notificar usuário sobre expiração
-                    await notify_access_expired(telegram_service, int(sale.user_telegram_id))
+                    await notify_access_expired(telegram_service, int(sale.user_telegram_id), bot.vip_type or "group")
                     
                     processed_count += 1
                     logger.info(f"Acesso expirado processado para venda {sale.id}")
@@ -328,12 +355,13 @@ async def expire_access():
         logger.error(f"Erro no processo de expiração: {str(e)}")
         raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
-async def notify_access_expired(telegram_service, user_id: int):
+async def notify_access_expired(telegram_service, user_id: int, chat_type: str = "group"):
     """Notificar usuário sobre expiração do acesso"""
     try:
+        chat_name = "canal" if chat_type == "channel" else "grupo"
         message = (
-            "⏰ <b>Seu acesso ao grupo VIP expirou</b>\n\n"
-            "Seu plano venceu e você foi removido do grupo.\n"
+            f"⏰ <b>Seu acesso ao {chat_name} VIP expirou</b>\n\n"
+            f"Seu plano venceu e você foi removido do {chat_name}.\n"
             "💡 Para renovar o acesso, use o comando /start\n\n"
             "Obrigado por ter sido nosso cliente! 🙏"
         )

@@ -26,6 +26,7 @@ export default function WelcomePage() {
   const [mediaPreview, setMediaPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const { user } = useAuthStore()
   const supabase = createClient()
 
@@ -66,6 +67,27 @@ export default function WelcomePage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Validar tamanho do arquivo
+      const maxSize = file.type.startsWith('video/') ? 25 * 1024 * 1024 : 10 * 1024 * 1024 // 25MB para vídeo, 10MB para imagem
+      const fileType = file.type.startsWith('video/') ? 'vídeo' : 'imagem'
+      const maxSizeText = file.type.startsWith('video/') ? '25MB' : '10MB'
+      
+      if (file.size > maxSize) {
+        alert(`⚠️ O arquivo enviado é muito grande. Limite de ${fileType}: ${maxSizeText}.`)
+        e.target.value = '' // Limpar o input
+        return
+      }
+
+      // Validar tipo de arquivo
+      const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
+      const validVideoTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/quicktime']
+      
+      if (!validImageTypes.includes(file.type) && !validVideoTypes.includes(file.type)) {
+        alert('⚠️ Tipo de arquivo não suportado. Use apenas: JPG, PNG, GIF, MP4, MOV.')
+        e.target.value = '' // Limpar o input
+        return
+      }
+      
       setMediaFile(file)
       const url = URL.createObjectURL(file)
       setMediaPreview(url)
@@ -73,20 +95,42 @@ export default function WelcomePage() {
   }
 
   const uploadMedia = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${user?.id}/${Date.now()}.${fileExt}`
+    setUploading(true)
+    try {
+      // Validar novamente o tamanho e tipo
+      const maxSize = file.type.startsWith('video/') ? 25 * 1024 * 1024 : 10 * 1024 * 1024
+      if (file.size > maxSize) {
+        const fileType = file.type.startsWith('video/') ? 'vídeo' : 'imagem'
+        const maxSizeText = file.type.startsWith('video/') ? '25MB' : '10MB'
+        throw new Error(`⚠️ O arquivo enviado é muito grande. Limite de ${fileType}: ${maxSizeText}.`)
+      }
 
-    const { error: uploadError } = await supabase.storage
-      .from('welcome_media')
-      .upload(fileName, file)
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user?.id}/${Date.now()}.${fileExt}`
 
-    if (uploadError) throw uploadError
+      console.log(`Iniciando upload: ${fileName} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
 
-    const { data } = supabase.storage
-      .from('welcome_media')
-      .getPublicUrl(fileName)
+      const { error: uploadError } = await supabase.storage
+        .from('welcome_media')
+        .upload(fileName, file, {
+          upsert: false, // Não sobrescrever arquivos existentes
+          cacheControl: '3600' // Cache por 1 hora
+        })
 
-    return data.publicUrl
+      if (uploadError) {
+        console.error('Erro no upload:', uploadError)
+        throw new Error(`Erro ao fazer upload do arquivo: ${uploadError.message}`)
+      }
+
+      const { data } = supabase.storage
+        .from('welcome_media')
+        .getPublicUrl(fileName)
+
+      console.log(`Upload concluído: ${data.publicUrl}`)
+      return data.publicUrl
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleSave = async () => {
@@ -143,7 +187,8 @@ export default function WelcomePage() {
       alert('Mensagem de boas-vindas salva com sucesso!')
     } catch (error) {
       console.error('Erro ao salvar:', error)
-      alert('Erro ao salvar. Tente novamente.')
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar. Tente novamente.'
+      alert(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -203,13 +248,25 @@ export default function WelcomePage() {
                 className="mb-2 bg-gray-800 border-gray-600 text-white"
               />
               <p className="text-xs text-gray-400">
-                Formatos aceitos: JPG, PNG, GIF, MP4, MOV
+                Formatos aceitos: JPG, PNG, GIF (até 10MB), MP4, MOV (até 25MB)
               </p>
+              
+              {mediaFile && (
+                <div className="mt-2 p-2 bg-gray-800 rounded border border-gray-600">
+                  <p className="text-xs text-gray-300">
+                    <strong>Arquivo selecionado:</strong> {mediaFile.name}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Tamanho: {(mediaFile.size / 1024 / 1024).toFixed(2)}MB | 
+                    Tipo: {mediaFile.type.startsWith('video/') ? 'Vídeo' : 'Imagem'}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <Button onClick={handleSave} disabled={saving} className="w-full">
+            <Button onClick={handleSave} disabled={saving || uploading} className="w-full">
               <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Salvando...' : 'Salvar Configurações'}
+              {uploading ? 'Fazendo upload...' : saving ? 'Salvando...' : 'Salvar Configurações'}
             </Button>
           </CardContent>
         </Card>

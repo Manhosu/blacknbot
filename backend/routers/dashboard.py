@@ -372,6 +372,123 @@ async def activate_bot_legacy(
         logger.error(f"Erro ao ativar bot: {str(e)}")
         raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
+# ===== VIP GROUP ENDPOINTS =====
+@router.post("/bots/{bot_id}/validate-vip-group")
+async def validate_vip_chat(
+    bot_id: str,
+    chat_data: dict,
+    current_user_email: str = Depends(get_current_user_email)
+):
+    """Validar e ativar canal ou grupo VIP via painel"""
+    try:
+        # Buscar usuário
+        user = await supabase_service.get_user_by_email(current_user_email)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        
+        # Verificar se o bot pertence ao usuário
+        bot = await supabase_service.get_bot(bot_id, user.id)
+        if not bot:
+            raise HTTPException(status_code=404, detail="Bot não encontrado")
+        
+        chat_identifier = chat_data.get("chat_identifier")
+        chat_type = chat_data.get("chat_type", "group")
+        
+        if not chat_identifier:
+            raise HTTPException(status_code=400, detail="Identificador do chat é obrigatório")
+        
+        if chat_type not in ["group", "channel"]:
+            raise HTTPException(status_code=400, detail="Tipo de chat deve ser 'group' ou 'channel'")
+        
+        # Usar API do Telegram diretamente para validação
+        import httpx
+        
+        # Tentar obter informações do grupo
+        async with httpx.AsyncClient() as client:
+            # Primeiro, obter informações do chat
+            chat_response = await client.get(
+                f"https://api.telegram.org/bot{bot.bot_token}/getChat",
+                params={"chat_id": chat_identifier}
+            )
+            chat_info = chat_response.json()
+            
+            if not chat_info.get("ok"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Bot não tem acesso ao {chat_type} ou o {chat_type} não existe"
+                )
+            
+            chat_id = chat_info["result"]["id"]
+            chat_title = chat_info["result"].get("title", f"{chat_type.title()} VIP")
+            actual_chat_type = chat_info["result"].get("type", "")
+            
+            # Validar tipo de chat
+            if chat_type == "channel" and actual_chat_type not in ["channel"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="O chat identificado não é um canal"
+                )
+            elif chat_type == "group" and actual_chat_type not in ["group", "supergroup"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="O chat identificado não é um grupo"
+                )
+            
+            # Verificar se o bot é administrador
+            bot_user_id = bot.bot_token.split(":")[0]
+            member_response = await client.get(
+                f"https://api.telegram.org/bot{bot.bot_token}/getChatMember",
+                params={"chat_id": chat_id, "user_id": bot_user_id}
+            )
+            member_data = member_response.json()
+            
+            if not member_data.get("ok"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Não foi possível verificar o status do bot no {chat_type}"
+                )
+            
+            status = member_data["result"]["status"]
+            if status not in ["administrator", "creator"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"O bot precisa ser administrador no {chat_type} para ativá-lo"
+                )
+            
+            # Para canais, verificar se tem permissão de convidar usuários
+            if chat_type == "channel":
+                bot_member = member_data["result"]
+                can_invite_users = bot_member.get("can_invite_users", False)
+                if not can_invite_users and status != "creator":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="O bot precisa ter permissão para adicionar membros no canal"
+                    )
+            
+            # Salvar as informações do chat VIP no banco
+            bot_update = BotUpdate(
+                vip_chat_id=str(chat_id),
+                vip_type=chat_type,
+                vip_name=chat_title
+            )
+            updated_bot = await supabase_service.update_bot(bot_id, user.id, bot_update)
+            
+            return {
+                "success": True,
+                "message": f"✅ {chat_type.title()} VIP '{chat_title}' ativado com sucesso!",
+                "group_info": {
+                    "chat_id": str(chat_id),
+                    "title": chat_title,
+                    "type": actual_chat_type,
+                }
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao validar chat VIP: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")
+
 # ===== MESSAGE ENDPOINTS =====
 @router.post("/message")
 async def update_welcome_message(

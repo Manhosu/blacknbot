@@ -13,9 +13,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Verificar sessão inicial
     const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-      setLoading(false)
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) {
+          console.error('Erro ao obter sessão:', error)
+        }
+        setUser(session?.user ?? null)
+      } catch (error) {
+        console.error('Erro na autenticação:', error)
+        setUser(null)
+      } finally {
+        setLoading(false)
+      }
     }
 
     getSession()
@@ -23,8 +32,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Escutar mudanças na autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setUser(session?.user ?? null)
-        setLoading(false)
+        try {
+          setUser(session?.user ?? null)
+        } catch (error) {
+          console.error('Erro no state change:', error)
+          setUser(null)
+        } finally {
+          setLoading(false)
+        }
       }
     )
 

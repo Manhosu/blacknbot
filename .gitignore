@@ -9,11 +9,14 @@ frontend/.env.local
 frontend/.env.production.local
 
 # Python
-backend/__pycache__/
-backend/*.pyc
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
 backend/.env
 backend/venv/
 backend/.venv/
+*.egg-info/
 
 # Database
 *.db
@@ -89,4 +92,24 @@ public
 
 # Temporary folders
 tmp/
-temp/ 
+temp/
+ngrok_temp/
+
+# Project specific
+*.exe
+*.zip
+*.md.backup
+cursor_*.md
+
+# Railway and deployment
+railway.json.backup
+ngrok_temp/
+
+# Project specific
+*.exe
+*.zip
+*.md.backup
+cursor_*.md
+
+# Railway and deployment
+railway.json.backup 

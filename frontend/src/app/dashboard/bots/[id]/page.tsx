@@ -36,7 +36,10 @@ interface BotData {
   welcome_text: string
   media_url: string | null
   media_type: 'photo' | 'video' | null
+  vip_chat_id: string | null
   vip_group_id: string | null
+  vip_type: 'group' | 'channel' | null
+  vip_name: string | null
   is_active: boolean
   created_at: string
   updated_at: string
@@ -90,10 +93,12 @@ export default function BotDetailPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editData, setEditData] = useState({
     bot_username: '',
+    vip_chat_id: '',
     vip_group_id: ''
   })
-  const [groupInput, setGroupInput] = useState('')
-  const [activatingGroup, setActivatingGroup] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [chatType, setChatType] = useState<'group' | 'channel'>('group')
+  const [activatingChat, setActivatingChat] = useState(false)
 
   useEffect(() => {
     if (user && botId) {
@@ -101,16 +106,16 @@ export default function BotDetailPage() {
     }
   }, [user, botId])
 
-  // Verificar periodicamente se o grupo VIP foi configurado (apenas se não estiver configurado)
+  // Verificar periodicamente se o chat VIP foi configurado (apenas se não estiver configurado)
   useEffect(() => {
-    if (!bot?.vip_group_id) {
+    if (!bot?.vip_chat_id) {
       const interval = setInterval(() => {
         loadBotData()
       }, 10000) // Verificar a cada 10 segundos
 
       return () => clearInterval(interval)
     }
-  }, [bot?.vip_group_id])
+  }, [bot?.vip_chat_id])
 
   const loadBotData = async () => {
     setIsLoading(true)
@@ -133,8 +138,14 @@ export default function BotDetailPage() {
       setBot(botData)
       setEditData({
         bot_username: botData.bot_username,
+        vip_chat_id: botData.vip_chat_id || '',
         vip_group_id: botData.vip_group_id || ''
       })
+      
+      // Definir o tipo de chat baseado nos dados existentes
+      if (botData.vip_type) {
+        setChatType(botData.vip_type as 'group' | 'channel')
+      }
 
       // Buscar planos
       const { data: plansData, error: plansError } = await supabase
@@ -255,18 +266,27 @@ export default function BotDetailPage() {
 
     setSaving(true)
     try {
+      const newStatus = !bot.is_active
+      
+      // Atualizar no banco de dados
       const { error } = await supabase
         .from('bots')
-        .update({ is_active: !bot.is_active })
+        .update({ is_active: newStatus })
         .eq('id', bot.id)
 
       if (error) throw error
 
-      setBot(prev => prev ? { ...prev, is_active: !prev.is_active } : null)
-      alert(`Bot ${bot.is_active ? 'desativado' : 'ativado'} com sucesso!`)
+      // Atualizar o estado local
+      setBot(prev => prev ? { ...prev, is_active: newStatus } : null)
+      
+      // Forçar reload dos dados para garantir sincronização
+      await loadBotData()
+      
+      // Usar toast ao invés de alert
+      toast.success(`Bot ${bot.is_active ? 'desativado' : 'ativado'} com sucesso!`)
     } catch (error) {
       console.error('Erro ao alterar status do bot:', error)
-      alert('Erro ao alterar status do bot.')
+      toast.error('Erro ao alterar status do bot.')
     } finally {
       setSaving(false)
     }
@@ -303,7 +323,7 @@ export default function BotDetailPage() {
     }
   }
 
-  const extractGroupId = (input: string): string => {
+  const extractChatId = (input: string): string => {
     const trimmed = input.trim()
     
     // Se já é um ID numérico
@@ -311,7 +331,7 @@ export default function BotDetailPage() {
       return trimmed
     }
     
-    // Link público: https://t.me/grupovip
+    // Link público: https://t.me/grupovip ou https://t.me/canal
     if (trimmed.includes('t.me/') && !trimmed.includes('+')) {
       const match = trimmed.match(/t\.me\/([^/?]+)/)
       return match ? `@${match[1]}` : trimmed
@@ -330,13 +350,13 @@ export default function BotDetailPage() {
     return `@${trimmed}`
   }
 
-  const handleActivateGroup = async () => {
-    if (!groupInput.trim()) {
-      setError('Insira o link ou ID do grupo')
+  const handleActivateChat = async () => {
+    if (!chatInput.trim()) {
+      setError(`Insira o link ou ID do ${chatType === 'group' ? 'grupo' : 'canal'}`)
       return
     }
 
-    setActivatingGroup(true)
+    setActivatingChat(true)
     setError('')
 
     try {
@@ -347,41 +367,54 @@ export default function BotDetailPage() {
         throw new Error('Usuário não autenticado')
       }
 
-      const groupId = extractGroupId(groupInput)
+      const chatId = extractChatId(chatInput)
 
-      const response = await fetch(`/api/dashboard/bots/${botId}/activate-group`, {
+      const response = await fetch(`/api/dashboard/bots/${botId}/activate-chat`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          group_input: groupInput,
-          group_id: groupId
+          chat_input: chatInput,
+          chat_id: chatId,
+          chat_type: chatType
         })
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        setGroupInput('')
+        setChatInput('')
         await loadBotData() // Recarregar dados do bot
         
+        let successMessage = data.message || 'Chat VIP ativado com sucesso!'
+        
+        // Verificar se houve auto-correção do tipo
+        if (data.actualType && data.actualType !== chatType) {
+          const correctedType = data.actualType === 'channel' ? 'Canal' : 'Grupo'
+          const originalType = chatType === 'channel' ? 'Canal' : 'Grupo'
+          successMessage += `\n\n🔄 Tipo corrigido automaticamente: ${originalType} → ${correctedType}`
+        }
+        
         if (data.messageSent) {
-          toast.success('✅ Grupo VIP ativado com sucesso!\n📨 Mensagem de confirmação enviada no grupo!')
+          successMessage += '\n📨 Mensagem de confirmação enviada!'
+          toast.success(successMessage)
         } else {
-          toast.success('✅ Grupo VIP ativado com sucesso!\n⚠️ Mensagem não pôde ser enviada (verifique permissões)')
+          successMessage += '\n⚠️ Mensagem não pôde ser enviada (verifique permissões)'
+          toast.success(successMessage)
         }
       } else {
-        throw new Error(data.detail || 'Erro ao ativar grupo')
+        throw new Error(data.detail || data.error || `Erro ao ativar ${chatType === 'group' ? 'grupo' : 'canal'}`)
       }
     } catch (error: any) {
-      console.error('Erro ao ativar grupo:', error)
-      const errorMessage = error.message || '⚠️ Erro ao ativar grupo. Verifique se o bot é administrador.'
+      console.error('Erro ao ativar chat:', error)
+      const chatTypeText = chatType === 'group' ? 'grupo' : 'canal'
+      const errorMessage = error.message || `⚠️ Erro ao ativar ${chatTypeText}. Verifique se o bot é administrador.`
       setError(errorMessage)
       toast.error(errorMessage)
     } finally {
-      setActivatingGroup(false)
+      setActivatingChat(false)
     }
   }
 
@@ -510,8 +543,8 @@ export default function BotDetailPage() {
         </Card>
       </div>
 
-      {/* Aviso de Ativação do Grupo VIP */}
-      {!bot.vip_group_id && (
+      {/* Aviso de Ativação do Chat VIP */}
+      {!bot.vip_chat_id && (
         <Card className="bg-orange-900/20 border-orange-600">
           <CardHeader>
             <CardTitle className="text-orange-300 flex items-center">
@@ -519,7 +552,7 @@ export default function BotDetailPage() {
               Ative seu Bot para Começar a Receber Pagamentos
             </CardTitle>
             <CardDescription className="text-orange-200">
-              Configure o grupo VIP para que os usuários pagantes sejam adicionados automaticamente
+              Configure o grupo ou canal VIP para que os usuários pagantes sejam adicionados automaticamente
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -531,9 +564,9 @@ export default function BotDetailPage() {
                     1
                   </div>
                   <div>
-                    <p className="font-medium text-orange-100">Crie um grupo no Telegram</p>
+                    <p className="font-medium text-orange-100">Crie um grupo ou canal no Telegram</p>
                     <p className="text-sm text-orange-200">
-                      Crie um novo grupo ou use um grupo existente que será o VIP
+                      Crie um novo grupo/canal ou use um existente que será o VIP
                     </p>
                   </div>
                 </div>
@@ -545,7 +578,7 @@ export default function BotDetailPage() {
                   <div>
                     <p className="font-medium text-orange-100">Adicione o bot como administrador</p>
                     <p className="text-sm text-orange-200">
-                      Adicione <code className="bg-orange-700 px-1 rounded text-orange-100">@{bot.bot_username}</code> ao grupo e promova como administrador
+                      Adicione <code className="bg-orange-700 px-1 rounded text-orange-100">@{bot.bot_username}</code> ao grupo/canal e promova como administrador
                     </p>
                   </div>
                 </div>
@@ -555,9 +588,9 @@ export default function BotDetailPage() {
                     3
                   </div>
                   <div>
-                    <p className="font-medium text-orange-100">Ativar o grupo via painel</p>
+                    <p className="font-medium text-orange-100">Ativar o grupo/canal via painel</p>
                     <p className="text-sm text-orange-200">
-                      Cole o link ou ID do grupo no formulário abaixo e clique em "Ativar Grupo"
+                      Cole o link ou ID do grupo/canal no formulário abaixo e clique em "Ativar"
                     </p>
                   </div>
                 </div>
@@ -566,38 +599,92 @@ export default function BotDetailPage() {
 
             {/* Formulário de Ativação */}
             <div className="bg-gray-800/20 p-4 rounded-lg border border-gray-600">
-              <h4 className="font-medium text-gray-200 mb-3">🔗 Ativar Grupo VIP:</h4>
+              <h4 className="font-medium text-gray-200 mb-3">🔗 Ativar Chat VIP:</h4>
               
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {/* Seletor de Tipo */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Link ou ID do Grupo VIP:
+                    Tipo de Chat:
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="chatType"
+                        value="group"
+                        checked={chatType === 'group'}
+                        onChange={(e) => setChatType(e.target.value as 'group' | 'channel')}
+                        className="mr-2 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500"
+                        disabled={activatingChat}
+                      />
+                      <span className="text-gray-300">📱 Grupo</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="chatType"
+                        value="channel"
+                        checked={chatType === 'channel'}
+                        onChange={(e) => setChatType(e.target.value as 'group' | 'channel')}
+                        className="mr-2 text-blue-600 bg-gray-700 border-gray-600 focus:ring-blue-500"
+                        disabled={activatingChat}
+                      />
+                      <span className="text-gray-300">📢 Canal</span>
+                    </label>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-400">
+                    {chatType === 'group' 
+                      ? 'Grupos permitem discussões entre membros'
+                      : 'Canais são ideais para transmitir informações'
+                    }
+                  </div>
+                </div>
+
+                {/* Input do Chat */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Link ou ID do {chatType === 'group' ? 'Grupo' : 'Canal'} VIP:
                   </label>
                   <input
                     type="text"
-                    value={groupInput}
-                    onChange={(e) => setGroupInput(e.target.value)}
-                    placeholder="https://t.me/seugrupovip ou -1001234567890"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder={chatType === 'group' 
+                      ? "https://t.me/meugrupo ou @meugrupo"
+                      : "https://t.me/meucanal ou @meucanal"
+                    }
                     className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={activatingGroup}
+                    disabled={activatingChat}
                   />
-                  <div className="mt-1 text-xs text-gray-400">
-                    Formatos aceitos: https://t.me/grupo, https://t.me/+codigo, @grupo, -1001234567890
+                  <div className="mt-2 text-xs text-gray-400 space-y-1">
+                    <div><strong>Formatos aceitos:</strong></div>
+                    <div>• Link: https://t.me/{chatType === 'group' ? 'nomegrupo' : 'nomecanal'}</div>
+                    <div>• Username: @{chatType === 'group' ? 'nomegrupo' : 'nomecanal'}</div>
+                    <div>• ID: -100XXXXXXXXXX (apenas se você souber o ID exato)</div>
+                    
+                    <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-600 rounded text-yellow-200">
+                      <div className="text-xs font-medium">⚠️ Passo a passo:</div>
+                      <div className="text-xs">1. Crie um {chatType === 'group' ? 'grupo' : 'canal'} no Telegram</div>
+                      <div className="text-xs">2. Adicione @{bot?.bot_username} ao {chatType === 'group' ? 'grupo' : 'canal'}</div>
+                      <div className="text-xs">3. Promova o bot como administrador (com permissão para convidar)</div>
+                      <div className="text-xs">4. Copie o link do {chatType === 'group' ? 'grupo' : 'canal'} e cole aqui</div>
+                    </div>
                   </div>
                 </div>
 
                 <button
-                  onClick={handleActivateGroup}
-                  disabled={activatingGroup || !groupInput.trim()}
+                  onClick={handleActivateChat}
+                  disabled={activatingChat || !chatInput.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors"
                 >
-                  {activatingGroup ? (
+                  {activatingChat ? (
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                       Verificando...
                     </div>
                   ) : (
-                    'Ativar Grupo VIP'
+                    `Ativar ${chatType === 'group' ? 'Grupo' : 'Canal'} VIP`
                   )}
                 </button>
               </div>
@@ -612,20 +699,20 @@ export default function BotDetailPage() {
                 <li>• Personalizar a mensagem de boas-vindas do /start</li>
                 <li>• Criar e gerenciar planos de assinatura</li>
                 <li>• Receber pagamentos automaticamente</li>
-                <li>• Adicionar usuários pagantes ao grupo VIP automaticamente</li>
+                <li>• Adicionar usuários pagantes ao grupo/canal VIP automaticamente</li>
               </ul>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Grupo VIP Ativado */}
-      {bot.vip_group_id && (
+      {/* Chat VIP Ativado */}
+      {bot.vip_chat_id && (
         <Card className="bg-green-900/20 border-green-600">
           <CardHeader>
             <CardTitle className="text-green-300 flex items-center">
               <CheckCircle className="mr-2 h-5 w-5" />
-              Grupo VIP Ativado
+              {bot.vip_type === 'channel' ? '📢 Canal' : '📱 Grupo'} VIP Ativado
             </CardTitle>
             <CardDescription className="text-green-200">
               Seu bot está configurado e pronto para receber pagamentos
@@ -633,12 +720,22 @@ export default function BotDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-200">
-                  <strong>ID do Grupo:</strong> <code className="bg-green-700/50 px-2 py-1 rounded">{bot.vip_group_id}</code>
-                </p>
-                <p className="text-sm text-green-300 mt-1">
-                  Usuários pagantes serão adicionados automaticamente a este grupo
+              <div className="space-y-2">
+                <div>
+                  <p className="text-green-200">
+                    <strong>Tipo:</strong> <span className="text-green-100">{bot.vip_type === 'channel' ? 'Canal' : 'Grupo'}</span>
+                  </p>
+                  <p className="text-green-200">
+                    <strong>ID:</strong> <code className="bg-green-700/50 px-2 py-1 rounded">{bot.vip_chat_id}</code>
+                  </p>
+                  {bot.vip_name && (
+                    <p className="text-green-200">
+                      <strong>Nome:</strong> <span className="text-green-100">{bot.vip_name}</span>
+                    </p>
+                  )}
+                </div>
+                <p className="text-sm text-green-300">
+                  Usuários pagantes serão adicionados automaticamente a este {bot.vip_type === 'channel' ? 'canal' : 'grupo'}
                 </p>
               </div>
               <Badge className="bg-green-600 text-white">
@@ -691,18 +788,18 @@ export default function BotDetailPage() {
 
             <div>
               <label className="text-sm font-medium text-gray-300 block mb-2">
-                ID do Grupo VIP
+                ID do Chat VIP
               </label>
               {isEditing ? (
                 <Input
-                  value={editData.vip_group_id}
-                  onChange={(e) => setEditData(prev => ({ ...prev, vip_group_id: e.target.value }))}
+                  value={editData.vip_chat_id}
+                  onChange={(e) => setEditData(prev => ({ ...prev, vip_chat_id: e.target.value }))}
                   className="bg-gray-800 border-gray-600 text-white"
                   placeholder="-1001234567890"
                 />
               ) : (
                 <p className="text-gray-400 bg-gray-800 p-3 rounded border border-gray-600">
-                  {bot.vip_group_id || 'Não configurado'}
+                  {bot.vip_chat_id || 'Não configurado'}
                 </p>
               )}
             </div>

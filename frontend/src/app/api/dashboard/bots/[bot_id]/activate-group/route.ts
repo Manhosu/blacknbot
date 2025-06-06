@@ -39,18 +39,40 @@ export async function POST(
       return NextResponse.json({ error: 'Bot não encontrado' }, { status: 404 })
     }
 
-    // Validar grupo com API do Telegram
+    // Validar grupo/canal com API do Telegram
     try {
       const telegramResponse = await fetch(`https://api.telegram.org/bot${bot.bot_token}/getChat?chat_id=${group_id}`)
       const telegramData = await telegramResponse.json()
       
       if (!telegramData.ok) {
+        let errorMessage = 'Bot não tem acesso ao grupo/canal ou grupo/canal não encontrado'
+        
+        // Adicionar informações específicas do erro
+        if (telegramData.description) {
+          if (telegramData.description.includes('chat not found')) {
+            errorMessage = 'Grupo/canal não encontrado. Verifique se o link/ID está correto.'
+          } else if (telegramData.description.includes('bot is not a member')) {
+            errorMessage = 'Bot não é membro do grupo/canal. Adicione o bot primeiro.'
+          } else if (telegramData.description.includes('Forbidden')) {
+            errorMessage = 'Bot não tem permissão para acessar este grupo/canal.'
+          }
+        }
+        
         return NextResponse.json({ 
-          error: 'Bot não tem acesso ao grupo ou grupo não encontrado' 
+          error: errorMessage,
+          telegram_error: telegramData.description
         }, { status: 400 })
       }
 
-      // Verificar se o bot é administrador
+      // Verificar se é um tipo de chat válido (grupo, supergrupo ou canal)
+      const chatType = telegramData.result?.type
+      if (!['group', 'supergroup', 'channel'].includes(chatType)) {
+        return NextResponse.json({ 
+          error: `Tipo de chat inválido: ${chatType}. Apenas grupos, supergrupos e canais são suportados.` 
+        }, { status: 400 })
+      }
+
+      // Verificar se o bot é administrador (necessário para grupos e canais)
       const adminResponse = await fetch(`https://api.telegram.org/bot${bot.bot_token}/getChatAdministrators?chat_id=${group_id}`)
       const adminData = await adminResponse.json()
       
@@ -59,20 +81,36 @@ export async function POST(
         const botInfoData = await botInfo.json()
         
         if (botInfoData.ok) {
-          const botId = botInfoData.result.id
-          const isAdmin = adminData.result.some((admin: any) => admin.user.id === botId)
+          const botTelegramId = botInfoData.result.id
+          const isAdmin = adminData.result.some((admin: any) => admin.user.id === botTelegramId)
           
           if (!isAdmin) {
+            const chatTypeText = chatType === 'channel' ? 'canal' : 'grupo'
             return NextResponse.json({ 
-              error: 'Bot precisa ser administrador do grupo para funcionar corretamente' 
+              error: `Bot precisa ser administrador do ${chatTypeText} para funcionar corretamente. Adicione o bot como administrador com permissões para convidar usuários.` 
             }, { status: 400 })
           }
+          
+          // Para canais, verificar se o bot tem permissão para convidar usuários
+          if (chatType === 'channel') {
+            const botAdmin = adminData.result.find((admin: any) => admin.user.id === botTelegramId)
+            if (botAdmin && !botAdmin.can_invite_users) {
+              return NextResponse.json({ 
+                error: 'Bot precisa ter permissão para convidar usuários no canal. Verifique as configurações de administrador.' 
+              }, { status: 400 })
+            }
+          }
         }
+      } else {
+        // Se não conseguir verificar administradores, pode ser um erro de permissão
+        return NextResponse.json({ 
+          error: 'Não foi possível verificar permissões do bot. Certifique-se de que o bot é administrador.' 
+        }, { status: 400 })
       }
     } catch (error) {
-      console.error('Erro ao validar grupo:', error)
+      console.error('Erro ao validar grupo/canal:', error)
       return NextResponse.json({ 
-        error: 'Erro ao validar acesso ao grupo' 
+        error: 'Erro ao validar acesso ao grupo/canal' 
       }, { status: 400 })
     }
 
@@ -87,7 +125,7 @@ export async function POST(
 
     if (updateError) {
       console.error('Erro ao atualizar bot:', updateError)
-      return NextResponse.json({ error: 'Erro ao ativar grupo' }, { status: 500 })
+      return NextResponse.json({ error: 'Erro ao ativar grupo/canal' }, { status: 500 })
     }
 
     // Enviar mensagem de confirmação no grupo
@@ -95,7 +133,7 @@ export async function POST(
     try {
       const messageText = `🎉 *Bot Ativado com Sucesso!*
 
-✅ O bot @${bot.bot_username} foi integrado a este grupo VIP!
+✅ O bot @${bot.bot_username} foi integrado a este grupo/canal VIP!
 
 🔹 *Funcionalidades ativas:*
 • Adição automática de usuários pagantes
@@ -103,7 +141,7 @@ export async function POST(
 • Sistema de vendas integrado
 
 💡 *O que isso significa:*
-Agora quando alguém comprar um plano do seu bot, será automaticamente adicionado neste grupo!
+Agora quando alguém comprar um plano do seu bot, será automaticamente adicionado neste grupo/canal!
 
 🚀 *Próximos passos:*
 1. Configure seus planos no painel
@@ -130,18 +168,18 @@ _Powered by BlackinBot 🤖_`
       messageSent = messageData.ok
       
       if (messageSent) {
-        console.log('✅ Mensagem de ativação enviada no grupo com sucesso')
+        console.log('✅ Mensagem de ativação enviada no grupo/canal com sucesso')
       } else {
-        console.log('⚠️ Erro ao enviar mensagem no grupo:', messageData.description)
+        console.log('⚠️ Erro ao enviar mensagem no grupo/canal:', messageData.description)
       }
       
     } catch (error) {
-      console.error('❌ Erro ao enviar mensagem no grupo:', error)
+      console.error('❌ Erro ao enviar mensagem no grupo/canal:', error)
       // Não falhar a ativação se a mensagem não for enviada
     }
 
     return NextResponse.json({ 
-      message: 'Grupo VIP ativado com sucesso!',
+      message: 'Grupo/Canal VIP ativado com sucesso!',
       bot: updatedBot,
       messageSent: messageSent
     })
