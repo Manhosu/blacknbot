@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack --port 3025",
     "build": "next build",
+    "vercel-build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
